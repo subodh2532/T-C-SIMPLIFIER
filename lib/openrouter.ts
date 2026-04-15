@@ -73,7 +73,8 @@ function parseJsonFromModel(content: string): SimplifiedTerms {
 
 export async function simplifyWithOpenRouter(
   text: string,
-  language: LanguageOption
+  language: LanguageOption,
+  referer?: string
 ): Promise<SimplifiedTerms> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -100,7 +101,14 @@ export async function simplifyWithOpenRouter(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
+      "HTTP-Referer":
+        referer ||
+        process.env.APP_URL ||
+        (process.env.VERCEL_PROJECT_PRODUCTION_URL
+          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+          : process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : "http://localhost:3000"),
       "X-Title": "T&C Simplifier"
     },
     body: JSON.stringify({

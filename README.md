@@ -26,6 +26,28 @@ npm run dev
 
 5. Open `http://localhost:3000`.
 
+## Deploy To Vercel
+
+1. Push this repo to GitHub and import it into Vercel as a Next.js project.
+2. In Vercel Project Settings -> Environment Variables, add:
+   - `OPENROUTER_API_KEY`
+   - `OPENROUTER_MODEL` (optional, defaults to `mistralai/mistral-7b-instruct`)
+   - `APP_URL` (optional if you want to force a custom domain for OpenRouter referer headers)
+3. Add the variables to `Production` and `Preview` if you want both deployed environments to work.
+4. Redeploy after changing environment variables.
+
+This app is customized to work well on Vercel:
+
+- Next.js App Router is deployed with Vercel's default zero-config flow
+- The OpenRouter referer is inferred from the live request origin when possible
+- If no request origin is available, it falls back to `APP_URL`, then Vercel system URLs, then localhost
+
+Useful Vercel docs:
+
+- [Next.js on Vercel](https://vercel.com/docs/frameworks/nextjs)
+- [Environment variables](https://vercel.com/docs/environment-variables)
+- [System environment variables](https://vercel.com/docs/environment-variables/system-environment-variables)
+
 ## Features
 
 - Paste Terms & Conditions text into the textarea

@@ -22,7 +22,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A supported language is required." }, { status: 400 });
     }
 
-    const result = await simplifyWithOpenRouter(text.slice(0, 18000), language);
+    const requestOrigin = request.headers.get("origin");
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const forwardedHost = request.headers.get("host");
+    const origin =
+      requestOrigin ||
+      (forwardedHost
+        ? `${forwardedProto || "https"}://${forwardedHost}`
+        : undefined);
+
+    const result = await simplifyWithOpenRouter(text.slice(0, 18000), language, origin);
 
     return NextResponse.json(result);
   } catch (error) {
