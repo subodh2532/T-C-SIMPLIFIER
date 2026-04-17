@@ -1,19 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f8ff;
-  --foreground: #10203a;
-  --card: rgba(255, 255, 255, 0.88);
+  --background: #f5f8f3;
+  --foreground: #12211a;
+  --muted: #56645d;
+  --card: rgba(255, 255, 255, 0.82);
   --card-strong: #ffffff;
-  --border: rgba(35, 79, 154, 0.12);
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --accent: #0f766e;
-  --risk: #dc2626;
-  --warning: #f59e0b;
-  --safe: #16a34a;
-  --muted: #5b6b86;
-  --shadow: 0 24px 80px rgba(37, 99, 235, 0.14);
+  --border: rgba(18, 33, 26, 0.08);
+  --primary: #1f7a5c;
+  --primary-strong: #0d5b41;
+  --secondary: #d7efe5;
+  --accent: #f4b942;
+  --danger: #d84f4f;
+  --warning: #ef8f2f;
+  --safe: #2f855a;
+  --shadow: 0 24px 80px rgba(16, 40, 29, 0.12);
 }
 
 * {
@@ -28,20 +29,28 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.22), transparent 30%),
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.18), transparent 28%),
-    linear-gradient(180deg, #eef5ff 0%, #f9fbff 48%, #eef6ff 100%);
+    radial-gradient(circle at top left, rgba(31, 122, 92, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(244, 185, 66, 0.16), transparent 24%),
+    linear-gradient(180deg, #eef5ef 0%, #f8fbf8 46%, #eff8f1 100%);
   color: var(--foreground);
-  font-family: var(--font-sans), sans-serif;
+  font-family: "Manrope", "Aptos", "Segoe UI", sans-serif;
 }
 
 button,
 input,
-select,
 textarea {
   font: inherit;
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+}
+
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(31, 122, 92, 0.2);
 }

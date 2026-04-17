@@ -1,11 +1,25 @@
-export function getScoreLabel(score: number) {
-  if (score >= 8) {
-    return { text: "Safe", tone: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+import type { Verdict, RiskLevel } from "@/lib/types";
+
+export function getRiskTone(level: RiskLevel) {
+  if (level === "High") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
   }
 
-  if (score >= 5) {
-    return { text: "Moderate", tone: "text-amber-700 bg-amber-50 border-amber-200" };
+  if (level === "Medium") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
-  return { text: "Risky", tone: "text-rose-700 bg-rose-50 border-rose-200" };
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+export function getVerdictTone(verdict: Verdict) {
+  if (verdict === "Risky") {
+    return "border-rose-300 bg-rose-50 text-rose-700";
+  }
+
+  if (verdict === "Caution") {
+    return "border-amber-300 bg-amber-50 text-amber-700";
+  }
+
+  return "border-emerald-300 bg-emerald-50 text-emerald-700";
 }

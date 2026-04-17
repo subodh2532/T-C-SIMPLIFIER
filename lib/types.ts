@@ -1,15 +1,26 @@
-export type LanguageOption = "English" | "Hindi" | "Marathi" | "Hinglish";
+export type InputMode = "camera" | "upload" | "text" | "url";
 
-export type SimplifiedTerms = {
-  language: LanguageOption;
+export type RiskLevel = "High" | "Medium" | "Low";
+
+export type Verdict = "Safe" | "Caution" | "Risky";
+
+export type RiskItem = {
+  level: RiskLevel;
+  title: string;
+  detail: string;
+};
+
+export type AnalysisResult = {
   summary: string[];
-  key_points: string[];
-  risks: string[];
-  data_usage: string[];
-  safety_score: number;
+  risks: RiskItem[];
+  verdict: Verdict;
+  verdict_reason: string;
+  extracted_preview: string[];
 };
 
 export type FetchTermsResponse = {
   content: string;
   source: string;
+  pageTitle?: string;
+  matchedPath?: string;
 };

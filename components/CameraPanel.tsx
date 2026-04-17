@@ -24,9 +24,7 @@ export function CameraPanel({ onCapture, busy }: CameraPanelProps) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment"
-        },
+        video: { facingMode: "environment" },
         audio: false
       });
 
@@ -75,7 +73,7 @@ export function CameraPanel({ onCapture, busy }: CameraPanelProps) {
       return;
     }
 
-    const file = new File([blob], `terms-scan-${Date.now()}.jpg`, {
+    const file = new File([blob], `tnc-scan-${Date.now()}.jpg`, {
       type: "image/jpeg"
     });
 
@@ -84,41 +82,22 @@ export function CameraPanel({ onCapture, busy }: CameraPanelProps) {
   }
 
   return (
-    <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-[0_16px_45px_rgba(15,23,42,0.08)]">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-base font-semibold text-slate-900">Scan with Camera</p>
+          <p className="text-sm font-semibold text-slate-900">Camera scan</p>
           <p className="text-sm text-slate-600">
-            Capture a printed form or upload a photo to pull text with OCR.
+            Use your device camera to capture printed or on-screen terms.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={cameraOpen ? stopCamera : startCamera}
-            className="rounded-full border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
-          >
-            {cameraOpen ? "Close Camera" : "Scan Document"}
-          </button>
-          <label className="cursor-pointer rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
-            Upload Image
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              disabled={busy}
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) {
-                  return;
-                }
-
-                await onCapture(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={cameraOpen ? stopCamera : startCamera}
+          className="inline-flex h-11 items-center justify-center rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {cameraOpen ? "Close Camera" : "Open Camera"}
+        </button>
       </div>
 
       {cameraError ? (
@@ -128,7 +107,7 @@ export function CameraPanel({ onCapture, busy }: CameraPanelProps) {
       ) : null}
 
       {cameraOpen ? (
-        <div className="mt-4 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-950/95 p-3">
+        <div className="mt-4 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-950 p-3">
           <video
             ref={videoRef}
             playsInline
@@ -138,16 +117,16 @@ export function CameraPanel({ onCapture, busy }: CameraPanelProps) {
           <div className="mt-3 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={captureImage}
               disabled={busy}
-              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+              onClick={captureImage}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Capture Photo
             </button>
             <button
               type="button"
               onClick={stopCamera}
-              className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-white/25 px-4 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               Cancel
             </button>

@@ -1,4 +1,4 @@
-import type { LanguageOption, SimplifiedTerms } from "@/lib/types";
+import type { AnalysisResult, RiskItem, Verdict } from "@/lib/types";
 
 type OpenRouterMessage = {
   role: "system" | "user";
@@ -15,67 +15,119 @@ type OpenRouterResponse = {
   choices?: OpenRouterChoice[];
 };
 
-function buildPrompt(text: string, language: LanguageOption) {
+type ParsedAnalysis = {
+  summary?: string[];
+  risks?: RiskItem[];
+  verdict?: Verdict;
+  verdict_reason?: string;
+  extracted_preview?: string[];
+};
+
+function buildPrompt(text: string) {
   return `
-You are a helpful Terms and Conditions simplifier for students and everyday users.
+You are a legal simplification assistant.
 
-Task:
-- Read the legal text carefully.
-- Explain it in ${language}.
-- Use simple conversational wording.
-- Avoid legal jargon and avoid scary wording unless a real risk exists.
-- Highlight risky clauses such as data sharing, auto-renewal, no refunds, hidden charges, one-sided liability, arbitration, account termination, and broad permissions.
-- Explain what data is collected, how it is used, and whether it may be shared.
-- Rate the safety on a 1 to 10 scale.
+Read the Terms and Conditions text and return only valid JSON.
 
-Language rules:
-- English: plain everyday English
-- Hindi: simple spoken Hindi
-- Marathi: easy conversational Marathi
-- Hinglish: natural Hindi-English mix
+Goals:
+1. Convert the document into short, simple bullet points for everyday users.
+2. Highlight the biggest risks using severity levels High, Medium, or Low.
+3. Give a final verdict: Safe, Caution, or Risky.
+4. Keep explanations plain and practical, not academic.
 
-Return only valid JSON with this exact shape:
+Return this exact JSON shape:
 {
-  "language": "${language}",
-  "summary": ["3 to 5 bullets"],
-  "key_points": ["important points"],
-  "risks": ["risk alerts"],
-  "data_usage": ["data collection and sharing points"],
-  "safety_score": 1
+  "summary": ["bullet", "bullet", "bullet"],
+  "risks": [
+    {
+      "level": "High",
+      "title": "Short risk title",
+      "detail": "One clear sentence explaining the risk"
+    }
+  ],
+  "verdict": "Caution",
+  "verdict_reason": "One short sentence",
+  "extracted_preview": ["short excerpt", "short excerpt", "short excerpt"]
 }
 
-Extra rules:
-- Every array must contain at least 3 short bullet strings when the text contains enough information.
-- Keep bullets concise.
-- safety_score must be an integer from 1 to 10.
+Rules:
+- Return 3 to 6 summary bullets.
+- Return 2 to 5 risks when possible.
+- If the text seems mostly harmless, use lower severity items honestly.
+- extracted_preview must be short direct snippets or paraphrased excerpts from the supplied text.
 - Do not wrap the JSON in markdown.
 
-Legal text:
+Text:
 """${text}"""
 `.trim();
 }
 
-function parseJsonFromModel(content: string): SimplifiedTerms {
+function parseJson(content: string): ParsedAnalysis {
   const cleaned = content.trim();
-  const jsonBlockMatch = cleaned.match(/\{[\s\S]*\}/);
-  const rawJson = jsonBlockMatch ? jsonBlockMatch[0] : cleaned;
-  const parsed = JSON.parse(rawJson) as SimplifiedTerms;
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  const raw = jsonMatch ? jsonMatch[0] : cleaned;
+
+  return JSON.parse(raw) as ParsedAnalysis;
+}
+
+function normalizeResult(parsed: ParsedAnalysis): AnalysisResult {
+  const risks = Array.isArray(parsed.risks)
+    ? parsed.risks
+        .map((risk) => ({
+          level:
+            risk.level === "High" || risk.level === "Medium" || risk.level === "Low"
+              ? risk.level
+              : "Medium",
+          title: String(risk.title || "Potential issue"),
+          detail: String(risk.detail || "Review this clause carefully.")
+        }))
+        .slice(0, 5)
+    : [];
+
+  const verdict: Verdict =
+    parsed.verdict === "Safe" || parsed.verdict === "Risky" || parsed.verdict === "Caution"
+      ? parsed.verdict
+      : risks.some((risk) => risk.level === "High")
+        ? "Risky"
+        : risks.some((risk) => risk.level === "Medium")
+          ? "Caution"
+          : "Safe";
 
   return {
-    language: parsed.language,
-    summary: parsed.summary ?? [],
-    key_points: parsed.key_points ?? [],
-    risks: parsed.risks ?? [],
-    data_usage: parsed.data_usage ?? [],
-    safety_score: Number(parsed.safety_score)
+    summary:
+      Array.isArray(parsed.summary) && parsed.summary.length
+        ? parsed.summary.map(String).slice(0, 6)
+        : ["The document was analyzed, but a clear summary could not be structured."],
+    risks:
+      risks.length > 0
+        ? risks
+        : [
+            {
+              level: "Low",
+              title: "No major issue detected",
+              detail: "No clear high-risk clause stood out in the provided text."
+            }
+          ],
+    verdict,
+    verdict_reason: String(
+      parsed.verdict_reason ||
+        (verdict === "Risky"
+          ? "This text contains strong caution signals."
+          : verdict === "Caution"
+            ? "Some clauses deserve careful review before you agree."
+            : "No major red flags were obvious from the supplied text.")
+    ),
+    extracted_preview:
+      Array.isArray(parsed.extracted_preview) && parsed.extracted_preview.length
+        ? parsed.extracted_preview.map(String).slice(0, 4)
+        : []
   };
 }
 
 export async function simplifyWithOpenRouter(
   text: string,
-  language: LanguageOption,
   referer?: string
-): Promise<SimplifiedTerms> {
+): Promise<AnalysisResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
@@ -88,11 +140,11 @@ export async function simplifyWithOpenRouter(
     {
       role: "system",
       content:
-        "You simplify Terms and Conditions into safe, student-friendly explanations and return strict JSON."
+        "You simplify legal agreements into structured, everyday language and return strict JSON."
     },
     {
       role: "user",
-      content: buildPrompt(text, language)
+      content: buildPrompt(text)
     }
   ];
 
@@ -130,15 +182,5 @@ export async function simplifyWithOpenRouter(
     throw new Error("OpenRouter returned an empty response.");
   }
 
-  const result = parseJsonFromModel(content);
-  const safetyScore = Math.min(10, Math.max(1, Math.round(result.safety_score || 1)));
-
-  return {
-    language,
-    summary: result.summary.slice(0, 5),
-    key_points: result.key_points.slice(0, 6),
-    risks: result.risks.slice(0, 6),
-    data_usage: result.data_usage.slice(0, 6),
-    safety_score: safetyScore
-  };
+  return normalizeResult(parseJson(content));
 }
