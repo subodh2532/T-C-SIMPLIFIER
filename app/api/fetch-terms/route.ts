@@ -3,6 +3,7 @@ import {
   buildCandidateUrls,
   detectTermsLink,
   extractReadableText,
+  hasEnoughGeneralContent,
   hasEnoughLegalSignals
 } from "@/lib/extractTerms";
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         const html = candidateUrl === baseUrl.toString() ? initialHtml : await response.text();
         const content = extractReadableText(html);
 
-        if (!hasEnoughLegalSignals(content)) {
+        if (!hasEnoughLegalSignals(content) && !hasEnoughGeneralContent(content)) {
           continue;
         }
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "This site did not expose a readable legal page. Ecommerce homepages like Amazon or Flipkart often block scraping. Try the site's direct terms, privacy, refund, or return policy URL."
+          "This site did not expose enough readable content. Try a product page, direct terms page, privacy page, or a clearer screenshot."
       },
       { status: 422 }
     );

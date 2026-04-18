@@ -4,6 +4,8 @@ export type RiskLevel = "High" | "Medium" | "Low";
 
 export type Verdict = "Safe" | "Caution" | "Risky";
 
+export type OutputLanguage = "English" | "Hindi" | "Hinglish" | "Marathi";
+
 export type RiskItem = {
   level: RiskLevel;
   title: string;
@@ -11,8 +13,10 @@ export type RiskItem = {
 };
 
 export type AnalysisResult = {
-  summary: string[];
-  risks: RiskItem[];
+  terms_and_conditions: string[];
+  advantages: string[];
+  disadvantages: string[];
+  precautions: string[];
   verdict: Verdict;
   verdict_reason: string;
   extracted_preview: string[];

@@ -1,35 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CameraPanel } from "@/components/CameraPanel";
 import { SectionCard } from "@/components/SectionCard";
-import { getRiskTone, getVerdictTone } from "@/lib/score";
-import type { AnalysisResult, FetchTermsResponse } from "@/lib/types";
+import { languages } from "@/lib/languages";
+import { getVerdictTone } from "@/lib/score";
+import type { AnalysisResult, FetchTermsResponse, OutputLanguage } from "@/lib/types";
 
 const initialResult: AnalysisResult = {
-  summary: ["Paste text, upload an image, scan a page, or add a website link to begin."],
-  risks: [
-    {
-      level: "Low",
-      title: "Nothing analyzed yet",
-      detail: "Once you run Simplify, the main risks will appear here."
-    }
-  ],
+  terms_and_conditions: ["Paste a product link, upload a gallery image, or paste text to begin."],
+  advantages: ["Advantages will appear here after analysis."],
+  disadvantages: ["Disadvantages will appear here after analysis."],
+  precautions: ["Precautions will appear here after analysis."],
   verdict: "Caution",
-  verdict_reason: "Waiting for some Terms & Conditions text.",
+  verdict_reason: "Waiting for product or terms content.",
   extracted_preview: []
 };
-
-const quickExamples = [
-  "Paste a product return policy",
-  "Upload a shopping app screenshot",
-  "Scan a printed contract",
-  "Try a direct privacy or terms link"
-];
 
 export default function HomePage() {
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
+  const [language, setLanguage] = useState<OutputLanguage>("English");
   const [result, setResult] = useState<AnalysisResult>(initialResult);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -40,6 +31,11 @@ export default function HomePage() {
   const [isFetchingTerms, startFetchingTerms] = useTransition();
   const speakingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedLanguage = useMemo(
+    () => languages.find((item) => item.label === language) ?? languages[0],
+    [language]
+  );
 
   useEffect(() => {
     return () => {
@@ -79,10 +75,10 @@ export default function HomePage() {
       }
 
       setText(cleaned);
-      setInfo("Text added from your image. Now tap Simplify.");
+      setInfo("Image text added successfully. Tap Simplify to get bullets.");
     } catch (ocrError) {
       const message =
-        ocrError instanceof Error ? ocrError.message : "OCR failed. Please try another image.";
+        ocrError instanceof Error ? ocrError.message : "Image reading failed. Please try another photo.";
       setError(message);
     } finally {
       setOcrProgress("");
@@ -95,7 +91,7 @@ export default function HomePage() {
     setInfo("");
 
     if (!url.trim()) {
-      setError("Paste a website URL first.");
+      setError("Paste a product or website link first.");
       return;
     }
 
@@ -112,18 +108,16 @@ export default function HomePage() {
         const payload = (await response.json()) as FetchTermsResponse | { error: string };
 
         if (!response.ok || !("content" in payload)) {
-          throw new Error("error" in payload ? payload.error : "Could not extract legal text.");
+          throw new Error("error" in payload ? payload.error : "Could not extract page text.");
         }
 
         setText(payload.content);
         setInfo(
-          `Found legal text from ${payload.source}${payload.matchedPath ? ` (${payload.matchedPath})` : ""}. Now tap Simplify.`
+          `Content loaded from ${payload.source}${payload.matchedPath ? ` (${payload.matchedPath})` : ""}. Tap Simplify to continue.`
         );
       } catch (fetchError) {
         const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Could not fetch the website content.";
+          fetchError instanceof Error ? fetchError.message : "Could not fetch website content.";
         setError(message);
       }
     });
@@ -136,7 +130,7 @@ export default function HomePage() {
     stopSpeaking();
 
     if (!text.trim()) {
-      setError("Add text first. You can paste text, upload an image, scan, or use a URL.");
+      setError("Add a product link, gallery image, or pasted text first.");
       return;
     }
 
@@ -147,13 +141,16 @@ export default function HomePage() {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({
+            text,
+            language
+          })
         });
 
         const payload = (await response.json()) as AnalysisResult | { error: string };
 
-        if (!response.ok || !("summary" in payload)) {
-          throw new Error("error" in payload ? payload.error : "Simplification failed.");
+        if (!response.ok || !("terms_and_conditions" in payload)) {
+          throw new Error("error" in payload ? payload.error : "Analysis failed.");
         }
 
         setResult({
@@ -167,31 +164,43 @@ export default function HomePage() {
                   .filter(Boolean)
                   .slice(0, 4)
         });
-        setInfo("Done. You can review the summary below or listen to it.");
+        setInfo("Done. Your bullets are ready below.");
       } catch (simplifyError) {
         const message =
           simplifyError instanceof Error
             ? simplifyError.message
-            : "Something went wrong while simplifying the terms.";
+            : "Something went wrong while generating the summary.";
         setError(message);
       }
     });
   }
 
+  function buildVoiceText() {
+    return [
+      `Verdict: ${result.verdict}. ${result.verdict_reason}`,
+      "Terms and conditions.",
+      ...result.terms_and_conditions,
+      "Advantages.",
+      ...result.advantages,
+      "Disadvantages.",
+      ...result.disadvantages,
+      "Precautions.",
+      ...result.precautions
+    ].join(". ");
+  }
+
   function listenSummary() {
-    if (!result.summary.length) {
+    const voiceText = buildVoiceText();
+    if (!voiceText.trim()) {
       return;
     }
 
     stopSpeaking();
 
-    const fullText = [
-      `Verdict: ${result.verdict}. ${result.verdict_reason}`,
-      ...result.summary
-    ].join(". ");
-
-    const utterance = new SpeechSynthesisUtterance(fullText);
-    utterance.lang = "en-US";
+    const utterance = new SpeechSynthesisUtterance(voiceText);
+    utterance.lang = selectedLanguage.speechCode;
+    utterance.rate = 1;
+    utterance.pitch = 1;
     utterance.onend = () => {
       speakingRef.current = false;
       setIsPaused(false);
@@ -245,22 +254,15 @@ export default function HomePage() {
       <section className="rounded-[32px] border border-white/70 bg-white/88 p-5 shadow-[0_24px_80px_rgba(16,40,29,0.1)] sm:p-8">
         <div className="space-y-4">
           <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
-            Simple T&amp;C Checker
+            Product and T&amp;C Simplifier
           </div>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
             T&amp;C Simplifier
           </h1>
-          <p className="max-w-2xl text-base leading-7 text-slate-600">
-            Keep it simple: add a link, paste the text, or upload a screenshot. The app will pull
-            out the important points, flag the risks, and give you a quick verdict.
-          </p>
-        </div>
-
-        <div className="mt-6 rounded-[28px] border border-emerald-100 bg-emerald-50/70 p-4">
-          <p className="text-sm font-semibold text-slate-900">Best for Amazon / Flipkart / ecommerce links</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Homepages often block or hide legal text. If a homepage link fails, try the site&apos;s
-            direct privacy policy, terms page, or return policy link instead.
+          <p className="max-w-3xl text-base leading-7 text-slate-600">
+            Paste any ecommerce product link, upload a photo from your gallery, scan a page, or
+            paste text. The app will show terms and conditions, advantages, disadvantages, and
+            precautions in bullet points.
           </p>
         </div>
 
@@ -270,7 +272,7 @@ export default function HomePage() {
               type="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder="Paste website URL"
+              placeholder="Paste product URL or website link"
               className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
             />
             <button
@@ -279,20 +281,50 @@ export default function HomePage() {
               onClick={fetchTermsFromUrl}
               className="inline-flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {isFetchingTerms ? "Checking..." : "Use Link"}
+              {isFetchingTerms ? "Loading..." : "Use Link"}
             </button>
           </div>
 
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Or paste Terms & Conditions text here..."
-            className="min-h-[240px] w-full rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+            placeholder="Or paste product details, policy text, or terms here..."
+            className="min-h-[220px] w-full rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
           />
+
+          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+            <div className="space-y-2">
+              <label htmlFor="language" className="text-sm font-semibold text-slate-900">
+                Output language
+              </label>
+              <select
+                id="language"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value as OutputLanguage)}
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              >
+                {languages.map((item) => (
+                  <option key={item.label} value={item.label}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">{selectedLanguage.helper}</p>
+            </div>
+
+            <button
+              type="button"
+              disabled={isSimplifying}
+              onClick={simplifyTerms}
+              className="inline-flex h-12 items-center justify-center rounded-2xl bg-[var(--primary)] px-6 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(31,122,92,0.28)] transition hover:bg-[var(--primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSimplifying ? "Simplifying..." : "Simplify"}
+            </button>
+          </div>
 
           <div className="flex flex-wrap gap-3">
             <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white">
-              Upload Image
+              Upload from Gallery
               <input
                 ref={fileInputRef}
                 type="file"
@@ -313,21 +345,11 @@ export default function HomePage() {
 
             <button
               type="button"
-              disabled={isSimplifying}
-              onClick={simplifyTerms}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-6 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(31,122,92,0.28)] transition hover:bg-[var(--primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSimplifying ? "Simplifying..." : "Simplify"}
-            </button>
-
-            <button
-              type="button"
               onClick={listenSummary}
               className="inline-flex h-12 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
             >
               Listen
             </button>
-
             <button
               type="button"
               onClick={togglePause}
@@ -335,7 +357,6 @@ export default function HomePage() {
             >
               {isPaused ? "Resume" : "Pause"}
             </button>
-
             <button
               type="button"
               onClick={stopSpeaking}
@@ -343,7 +364,6 @@ export default function HomePage() {
             >
               Stop
             </button>
-
             {lastAction ? (
               <button
                 type="button"
@@ -356,17 +376,6 @@ export default function HomePage() {
           </div>
 
           <CameraPanel onCapture={handleOcr} busy={busy} />
-
-          <div className="flex flex-wrap gap-2">
-            {quickExamples.map((item) => (
-              <span
-                key={item}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
 
           {ocrProgress ? (
             <p className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
@@ -389,7 +398,7 @@ export default function HomePage() {
       </section>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <SectionCard title="Verdict" description="The quick answer.">
+        <SectionCard title="Verdict" description="Quick overall result.">
           <div
             className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${getVerdictTone(result.verdict)}`}
           >
@@ -398,49 +407,45 @@ export default function HomePage() {
           <p className="mt-4 text-sm leading-6 text-slate-700">{result.verdict_reason}</p>
         </SectionCard>
 
-        <SectionCard title="Summary" description="The main points in plain English.">
-          <ul className="space-y-3">
-            {result.summary.map((item, index) => (
-              <li
-                key={`summary-${index}`}
-                className="flex items-start gap-3 text-sm leading-6 text-slate-700"
-              >
-                <span className="mt-2 h-2 w-2 rounded-full bg-emerald-500" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+        <SectionCard title="Terms and Conditions" description="Main points in bullet form.">
+          <BulletList items={result.terms_and_conditions} />
         </SectionCard>
 
-        <SectionCard title="Risks" description="What deserves extra attention.">
-          <div className="space-y-3">
-            {result.risks.map((risk, index) => (
-              <div
-                key={`${risk.title}-${index}`}
-                className={`rounded-[22px] border p-4 ${getRiskTone(risk.level)}`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold">{risk.title}</p>
-                  <span className="rounded-full border border-current/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
-                    {risk.level}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-6">{risk.detail}</p>
-              </div>
-            ))}
-          </div>
+        <SectionCard title="Advantages" description="Helpful or positive points.">
+          <BulletList items={result.advantages} />
         </SectionCard>
 
-        <SectionCard title="Preview" description="The text used for analysis.">
+        <SectionCard title="Disadvantages" description="Possible downsides or weak points.">
+          <BulletList items={result.disadvantages} />
+        </SectionCard>
+
+        <SectionCard title="Precautions" description="What to check before buying or agreeing.">
+          <BulletList items={result.precautions} />
+        </SectionCard>
+
+        <SectionCard title="Source Preview" description="Extracted text used for analysis.">
           {text.trim() ? (
             <div className="max-h-[320px] overflow-auto rounded-[22px] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
               {text}
             </div>
           ) : (
-            <p className="text-sm leading-6 text-slate-600">Your extracted or pasted text will appear here.</p>
+            <p className="text-sm leading-6 text-slate-600">Your extracted text will appear here.</p>
           )}
         </SectionCard>
       </section>
     </main>
+  );
+}
+
+function BulletList({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`} className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+          <span className="mt-2 h-2 w-2 rounded-full bg-emerald-500" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

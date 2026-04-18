@@ -110,6 +110,10 @@ export function hasEnoughLegalSignals(text: string) {
   return hits >= 2;
 }
 
+export function hasEnoughGeneralContent(text: string) {
+  return text.trim().length >= 300;
+}
+
 export function detectTermsLink(html: string, baseUrl: URL) {
   const $ = cheerio.load(html);
   const candidates: { href: string; score: number }[] = [];

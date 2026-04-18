@@ -1,4 +1,4 @@
-import type { AnalysisResult, RiskItem, Verdict } from "@/lib/types";
+import type { AnalysisResult, OutputLanguage, Verdict } from "@/lib/types";
 
 type OpenRouterMessage = {
   role: "system" | "user";
@@ -16,45 +16,47 @@ type OpenRouterResponse = {
 };
 
 type ParsedAnalysis = {
-  summary?: string[];
-  risks?: RiskItem[];
+  terms_and_conditions?: string[];
+  advantages?: string[];
+  disadvantages?: string[];
+  precautions?: string[];
   verdict?: Verdict;
   verdict_reason?: string;
   extracted_preview?: string[];
 };
 
-function buildPrompt(text: string) {
+function buildPrompt(text: string, language: OutputLanguage) {
   return `
-You are a legal simplification assistant.
+You are a shopping and terms simplification assistant.
 
-Read the Terms and Conditions text and return only valid JSON.
+The user may provide:
+- an ecommerce product page
+- product information
+- return or warranty text
+- a screenshot from a shopping app
+- terms and conditions text
 
-Goals:
-1. Convert the document into short, simple bullet points for everyday users.
-2. Highlight the biggest risks using severity levels High, Medium, or Low.
-3. Give a final verdict: Safe, Caution, or Risky.
-4. Keep explanations plain and practical, not academic.
+Explain the content in ${language}.
 
-Return this exact JSON shape:
+Return only valid JSON in this exact shape:
 {
-  "summary": ["bullet", "bullet", "bullet"],
-  "risks": [
-    {
-      "level": "High",
-      "title": "Short risk title",
-      "detail": "One clear sentence explaining the risk"
-    }
-  ],
+  "terms_and_conditions": ["bullet", "bullet", "bullet"],
+  "advantages": ["bullet", "bullet", "bullet"],
+  "disadvantages": ["bullet", "bullet", "bullet"],
+  "precautions": ["bullet", "bullet", "bullet"],
   "verdict": "Caution",
   "verdict_reason": "One short sentence",
   "extracted_preview": ["short excerpt", "short excerpt", "short excerpt"]
 }
 
 Rules:
-- Return 3 to 6 summary bullets.
-- Return 2 to 5 risks when possible.
-- If the text seems mostly harmless, use lower severity items honestly.
-- extracted_preview must be short direct snippets or paraphrased excerpts from the supplied text.
+- Keep every bullet short and easy to understand.
+- Use everyday wording, not legal or technical jargon.
+- If the input is a product page, include likely buyer advantages, disadvantages, and precautions.
+- If the input is legal text, explain the practical meaning for a buyer.
+- Return 3 to 5 bullets for each array when possible.
+- precautions should focus on what the user should check before buying or agreeing.
+- extracted_preview should contain short source snippets or paraphrased snippets from the text.
 - Do not wrap the JSON in markdown.
 
 Text:
@@ -70,62 +72,56 @@ function parseJson(content: string): ParsedAnalysis {
   return JSON.parse(raw) as ParsedAnalysis;
 }
 
+function normalizeList(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return fallback;
+  }
+
+  return value.map(String).slice(0, 5);
+}
+
 function normalizeResult(parsed: ParsedAnalysis): AnalysisResult {
-  const risks = Array.isArray(parsed.risks)
-    ? parsed.risks
-        .map((risk) => ({
-          level:
-            risk.level === "High" || risk.level === "Medium" || risk.level === "Low"
-              ? risk.level
-              : "Medium",
-          title: String(risk.title || "Potential issue"),
-          detail: String(risk.detail || "Review this clause carefully.")
-        }))
-        .slice(0, 5)
-    : [];
+  const disadvantages = normalizeList(parsed.disadvantages, [
+    "No clear disadvantages were detected from the provided content."
+  ]);
+  const precautions = normalizeList(parsed.precautions, [
+    "Read the return, refund, and warranty details before you proceed."
+  ]);
 
   const verdict: Verdict =
     parsed.verdict === "Safe" || parsed.verdict === "Risky" || parsed.verdict === "Caution"
       ? parsed.verdict
-      : risks.some((risk) => risk.level === "High")
-        ? "Risky"
-        : risks.some((risk) => risk.level === "Medium")
-          ? "Caution"
-          : "Safe";
+      : disadvantages.some((item) =>
+            item.toLowerCase().match(/hidden|strict|limited|non-refundable|risk|extra charge/)
+          )
+        ? "Caution"
+        : "Safe";
 
   return {
-    summary:
-      Array.isArray(parsed.summary) && parsed.summary.length
-        ? parsed.summary.map(String).slice(0, 6)
-        : ["The document was analyzed, but a clear summary could not be structured."],
-    risks:
-      risks.length > 0
-        ? risks
-        : [
-            {
-              level: "Low",
-              title: "No major issue detected",
-              detail: "No clear high-risk clause stood out in the provided text."
-            }
-          ],
+    terms_and_conditions: normalizeList(parsed.terms_and_conditions, [
+      "The main conditions could not be structured clearly from the provided content."
+    ]),
+    advantages: normalizeList(parsed.advantages, [
+      "The content does not clearly list strong benefits, so review the product details carefully."
+    ]),
+    disadvantages,
+    precautions,
     verdict,
     verdict_reason: String(
       parsed.verdict_reason ||
         (verdict === "Risky"
-          ? "This text contains strong caution signals."
+          ? "There are strong warning signs in this content."
           : verdict === "Caution"
-            ? "Some clauses deserve careful review before you agree."
-            : "No major red flags were obvious from the supplied text.")
+            ? "Check the important details before you buy or accept."
+            : "Nothing strongly risky stood out from the provided content.")
     ),
-    extracted_preview:
-      Array.isArray(parsed.extracted_preview) && parsed.extracted_preview.length
-        ? parsed.extracted_preview.map(String).slice(0, 4)
-        : []
+    extracted_preview: normalizeList(parsed.extracted_preview, [])
   };
 }
 
 export async function simplifyWithOpenRouter(
   text: string,
+  language: OutputLanguage,
   referer?: string
 ): Promise<AnalysisResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -140,11 +136,11 @@ export async function simplifyWithOpenRouter(
     {
       role: "system",
       content:
-        "You simplify legal agreements into structured, everyday language and return strict JSON."
+        "You convert shopping pages, screenshots, and terms text into short consumer-friendly JSON."
     },
     {
       role: "user",
-      content: buildPrompt(text)
+      content: buildPrompt(text, language)
     }
   ];
 

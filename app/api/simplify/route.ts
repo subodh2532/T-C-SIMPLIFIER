@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { simplifyWithOpenRouter } from "@/lib/openrouter";
+import type { OutputLanguage } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       text?: string;
+      language?: OutputLanguage;
     };
 
     const text = body.text?.trim();
+    const language = body.language ?? "English";
 
     if (!text) {
       return NextResponse.json({ error: "Terms text is required." }, { status: 400 });
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
       requestOrigin ||
       (forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : undefined);
 
-    const result = await simplifyWithOpenRouter(text.slice(0, 18000), origin);
+    const result = await simplifyWithOpenRouter(text.slice(0, 18000), language, origin);
     return NextResponse.json(result);
   } catch (error) {
     const message =
