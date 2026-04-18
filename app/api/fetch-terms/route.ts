@@ -9,6 +9,10 @@ import {
   looksLikeProductUrl
 } from "@/lib/extractTerms";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 function normalizeUrl(value: string) {
   const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   return new URL(withProtocol);
