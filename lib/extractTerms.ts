@@ -8,7 +8,10 @@ const LINK_PATTERNS = [
   "user-agreement",
   "legal",
   "privacy",
-  "policy"
+  "policy",
+  "return-policy",
+  "returns",
+  "refund"
 ];
 
 const TEXT_PATTERNS = [
@@ -22,8 +25,31 @@ const TEXT_PATTERNS = [
   "data",
   "liability",
   "terminate",
-  "arbitration"
+  "arbitration",
+  "return policy",
+  "cancellation"
 ];
+
+const GENERIC_LEGAL_PATHS = [
+  "/terms",
+  "/terms-and-conditions",
+  "/terms-of-use",
+  "/terms-of-service",
+  "/legal",
+  "/privacy",
+  "/privacy-policy",
+  "/return-policy",
+  "/returns",
+  "/refund-policy"
+];
+
+const DOMAIN_HINTS: Record<string, string[]> = {
+  "amazon.in": ["/gp/help/customer/display.html?nodeId=201909000", "/privacy"],
+  "amazon.com": ["/gp/help/customer/display.html?nodeId=508088", "/privacy"],
+  "flipkart.com": ["/pages/privacypolicy", "/pages/terms", "/pages/returnpolicy"],
+  "myntra.com": ["/privacy-policy", "/terms-of-use"],
+  "ajio.com": ["/privacy-policy", "/terms-and-conditions"]
+};
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -47,7 +73,6 @@ export function extractReadableText(html: string) {
   $("script, style, noscript, svg, nav, footer, header, iframe, form").remove();
 
   const candidates: { text: string; score: number }[] = [];
-
   const selectors = ["main", "article", "[role='main']", "section", "div", "body"];
 
   for (const selector of selectors) {
@@ -69,6 +94,20 @@ export function extractReadableText(html: string) {
   const fallback = normalizeWhitespace($("body").text());
 
   return (best?.text || fallback).slice(0, 16000);
+}
+
+export function hasEnoughLegalSignals(text: string) {
+  if (text.length < 250) {
+    return false;
+  }
+
+  const normalized = text.toLowerCase();
+  const hits = TEXT_PATTERNS.reduce(
+    (count, keyword) => count + (normalized.includes(keyword) ? 1 : 0),
+    0
+  );
+
+  return hits >= 2;
 }
 
 export function detectTermsLink(html: string, baseUrl: URL) {
@@ -102,4 +141,35 @@ export function detectTermsLink(html: string, baseUrl: URL) {
   });
 
   return candidates.sort((a, b) => b.score - a.score)[0]?.href;
+}
+
+export function buildCandidateUrls(baseUrl: URL, detectedLink?: string) {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  function add(url: string) {
+    if (!seen.has(url)) {
+      seen.add(url);
+      candidates.push(url);
+    }
+  }
+
+  add(baseUrl.toString());
+
+  if (detectedLink) {
+    add(detectedLink);
+  }
+
+  for (const path of GENERIC_LEGAL_PATHS) {
+    add(new URL(path, baseUrl).toString());
+  }
+
+  const hostname = baseUrl.hostname.replace(/^www\./, "");
+  const hinted = DOMAIN_HINTS[hostname] ?? [];
+
+  for (const path of hinted) {
+    add(new URL(path, baseUrl).toString());
+  }
+
+  return candidates;
 }

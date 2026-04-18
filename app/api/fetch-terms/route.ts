@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectTermsLink, extractReadableText } from "@/lib/extractTerms";
+import {
+  buildCandidateUrls,
+  detectTermsLink,
+  extractReadableText,
+  hasEnoughLegalSignals
+} from "@/lib/extractTerms";
 
 function normalizeUrl(value: string) {
   const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
@@ -10,9 +15,11 @@ async function fetchHtml(url: string) {
   return fetch(url, {
     headers: {
       "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari",
+      Accept: "text/html,application/xhtml+xml"
     },
-    cache: "no-store"
+    cache: "no-store",
+    redirect: "follow"
   });
 }
 
@@ -30,47 +37,62 @@ export async function POST(request: NextRequest) {
 
     if (!initialResponse.ok) {
       return NextResponse.json(
-        { error: "Could not fetch the webpage. Please try a different URL." },
+        {
+          error:
+            "Could not fetch that page. Try a direct privacy policy, terms page, or return policy link."
+        },
         { status: 400 }
       );
     }
 
     const initialHtml = await initialResponse.text();
-    const matchedLink = detectTermsLink(initialHtml, baseUrl);
+    const detectedLink = detectTermsLink(initialHtml, baseUrl);
+    const candidateUrls = buildCandidateUrls(baseUrl, detectedLink);
 
-    const targetUrl = matchedLink || baseUrl.toString();
-    const targetResponse =
-      targetUrl === baseUrl.toString() ? initialResponse : await fetchHtml(targetUrl);
+    for (const candidateUrl of candidateUrls) {
+      try {
+        const response =
+          candidateUrl === baseUrl.toString()
+            ? initialResponse
+            : await fetchHtml(candidateUrl);
 
-    const targetHtml =
-      targetUrl === baseUrl.toString() ? initialHtml : await targetResponse.text();
+        if (!response.ok) {
+          continue;
+        }
 
-    if (!targetResponse.ok) {
-      return NextResponse.json(
-        { error: "A terms or privacy page was found, but it could not be fetched." },
-        { status: 400 }
-      );
+        const html = candidateUrl === baseUrl.toString() ? initialHtml : await response.text();
+        const content = extractReadableText(html);
+
+        if (!hasEnoughLegalSignals(content)) {
+          continue;
+        }
+
+        const parsedTarget = new URL(candidateUrl);
+
+        return NextResponse.json({
+          source: parsedTarget.hostname,
+          pageTitle: parsedTarget.hostname,
+          matchedPath: parsedTarget.pathname + parsedTarget.search,
+          content: content.slice(0, 14000)
+        });
+      } catch {
+        continue;
+      }
     }
 
-    const content = extractReadableText(targetHtml);
-    if (!content || content.length < 250) {
-      return NextResponse.json(
-        { error: "Readable legal content was not found on that page." },
-        { status: 422 }
-      );
-    }
-
-    const parsedTarget = new URL(targetUrl);
-
-    return NextResponse.json({
-      source: parsedTarget.hostname,
-      pageTitle: parsedTarget.hostname,
-      matchedPath: parsedTarget.pathname,
-      content: content.slice(0, 14000)
-    });
+    return NextResponse.json(
+      {
+        error:
+          "This site did not expose a readable legal page. Ecommerce homepages like Amazon or Flipkart often block scraping. Try the site's direct terms, privacy, refund, or return policy URL."
+      },
+      { status: 422 }
+    );
   } catch {
     return NextResponse.json(
-      { error: "Invalid URL or extraction failed. Please check the link and try again." },
+      {
+        error:
+          "Invalid URL or extraction failed. Please paste a full website link and try again."
+      },
       { status: 400 }
     );
   }
