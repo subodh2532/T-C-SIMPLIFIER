@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildCandidateUrls,
   detectTermsLink,
+  extractProductContent,
   extractReadableText,
   hasEnoughGeneralContent,
-  hasEnoughLegalSignals
+  hasEnoughLegalSignals,
+  looksLikeProductUrl
 } from "@/lib/extractTerms";
 
 function normalizeUrl(value: string) {
@@ -47,6 +49,21 @@ export async function POST(request: NextRequest) {
     }
 
     const initialHtml = await initialResponse.text();
+    const isProductPage = looksLikeProductUrl(baseUrl);
+
+    if (isProductPage) {
+      const productContent = extractProductContent(initialHtml);
+
+      if (hasEnoughGeneralContent(productContent)) {
+        return NextResponse.json({
+          source: baseUrl.hostname,
+          pageTitle: baseUrl.hostname,
+          matchedPath: `${baseUrl.pathname}${baseUrl.search}`,
+          content: productContent.slice(0, 14000)
+        });
+      }
+    }
+
     const detectedLink = detectTermsLink(initialHtml, baseUrl);
     const candidateUrls = buildCandidateUrls(baseUrl, detectedLink);
 
@@ -62,13 +79,14 @@ export async function POST(request: NextRequest) {
         }
 
         const html = candidateUrl === baseUrl.toString() ? initialHtml : await response.text();
-        const content = extractReadableText(html);
+        const parsedTarget = new URL(candidateUrl);
+        const content = looksLikeProductUrl(parsedTarget)
+          ? extractProductContent(html)
+          : extractReadableText(html);
 
         if (!hasEnoughLegalSignals(content) && !hasEnoughGeneralContent(content)) {
           continue;
         }
-
-        const parsedTarget = new URL(candidateUrl);
 
         return NextResponse.json({
           source: parsedTarget.hostname,
@@ -84,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "This site did not expose enough readable content. Try a product page, direct terms page, privacy page, or a clearer screenshot."
+          "This link did not expose enough readable product or policy content. Try another product page, a direct terms page, or a clearer screenshot."
       },
       { status: 422 }
     );

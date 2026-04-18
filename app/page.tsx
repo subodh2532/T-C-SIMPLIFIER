@@ -113,7 +113,7 @@ export default function HomePage() {
 
         setText(payload.content);
         setInfo(
-          `Content loaded from ${payload.source}${payload.matchedPath ? ` (${payload.matchedPath})` : ""}. Tap Simplify to continue.`
+          `Content auto-filled from ${payload.source}${payload.matchedPath ? ` (${payload.matchedPath})` : ""}. Tap Simplify to continue.`
         );
       } catch (fetchError) {
         const message =
@@ -261,7 +261,8 @@ export default function HomePage() {
           </h1>
           <p className="max-w-3xl text-base leading-7 text-slate-600">
             Paste any ecommerce product link, upload a photo from your gallery, scan a page, or
-            paste text. The app will show terms and conditions, advantages, disadvantages, and
+            paste text. The app will automatically fetch product description content and show terms
+            and conditions, advantages, disadvantages, and
             precautions in bullet points.
           </p>
         </div>
@@ -272,7 +273,7 @@ export default function HomePage() {
               type="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder="Paste product URL or website link"
+              placeholder="Paste product URL and auto-fill from product description"
               className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
             />
             <button

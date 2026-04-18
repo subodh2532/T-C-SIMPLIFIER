@@ -30,6 +30,20 @@ const TEXT_PATTERNS = [
   "cancellation"
 ];
 
+const PRODUCT_PATTERNS = [
+  "description",
+  "highlights",
+  "specifications",
+  "features",
+  "offers",
+  "delivery",
+  "warranty",
+  "seller",
+  "rating",
+  "review",
+  "return"
+];
+
 const GENERIC_LEGAL_PATHS = [
   "/terms",
   "/terms-and-conditions",
@@ -61,10 +75,14 @@ function scoreCandidateText(text: string) {
     (total, keyword) => total + (normalized.includes(keyword) ? 16 : 0),
     0
   );
+  const productBoost = PRODUCT_PATTERNS.reduce(
+    (total, keyword) => total + (normalized.includes(keyword) ? 8 : 0),
+    0
+  );
   const sentenceBoost = Math.min((text.match(/[.!?]/g) ?? []).length * 1.2, 36);
   const lengthBoost = Math.min(text.length / 100, 40);
 
-  return keywordBoost + sentenceBoost + lengthBoost;
+  return keywordBoost + productBoost + sentenceBoost + lengthBoost;
 }
 
 export function extractReadableText(html: string) {
@@ -112,6 +130,68 @@ export function hasEnoughLegalSignals(text: string) {
 
 export function hasEnoughGeneralContent(text: string) {
   return text.trim().length >= 300;
+}
+
+export function looksLikeProductUrl(url: URL) {
+  const value = `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
+
+  return (
+    value.includes("/dp/") ||
+    value.includes("/p/") ||
+    value.includes("/product/") ||
+    value.includes("/products/") ||
+    value.includes("pid=") ||
+    value.includes("sku") ||
+    value.includes("item")
+  );
+}
+
+export function extractProductContent(html: string) {
+  const $ = cheerio.load(html);
+
+  $("script, style, noscript, svg, nav, footer, header, iframe, form").remove();
+
+  const title =
+    normalizeWhitespace($("meta[property='og:title']").attr("content") || "") ||
+    normalizeWhitespace($("title").first().text());
+  const description =
+    normalizeWhitespace($("meta[name='description']").attr("content") || "") ||
+    normalizeWhitespace($("meta[property='og:description']").attr("content") || "");
+
+  const selectorGroups = [
+    "[id*='product']",
+    "[class*='product']",
+    "[id*='description']",
+    "[class*='description']",
+    "[id*='detail']",
+    "[class*='detail']",
+    "[id*='feature']",
+    "[class*='feature']",
+    "[id*='highlight']",
+    "[class*='highlight']",
+    "[id*='spec']",
+    "[class*='spec']",
+    "main",
+    "article"
+  ];
+
+  const blocks: string[] = [];
+
+  for (const selector of selectorGroups) {
+    $(selector).each((_, element) => {
+      const text = normalizeWhitespace($(element).text());
+      if (text.length >= 120) {
+        blocks.push(text);
+      }
+    });
+  }
+
+  const combined = [title, description, ...blocks]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 16000);
+
+  return normalizeWhitespace(combined).slice(0, 16000);
 }
 
 export function detectTermsLink(html: string, baseUrl: URL) {
